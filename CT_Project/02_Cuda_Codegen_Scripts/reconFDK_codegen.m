@@ -1,14 +1,17 @@
-
 function FDKvol = reconFDK_codegen( ...
     P, angles_rad, DSD, DSO, du, dv, u0_pixels, v0_pixels, ...
     dx, dy, dz, nx, ny, nz, filter_type, ...
     Nf_fft, padFactor, batchZ, useGPU, verbose)
 %#codegen
 % Entry point for GPU Coder. No file I/O here.
+% P: [nu,nv,nViews] single
+% angles_rad: [1,nViews] single (radians)
+% filter_type: 'ramp'|'hamming'|'shepp-logan' (coder.Constant recommended)
+% Nf_fft: int32 (>= nu). Use power-of-two for stability (e.g., 1024)
 
-    % Types & shapes (standardize to single/ints for codegen)
-    P          = single(P);                     % [nu,nv,nViews]
-    angles_rad = single(angles_rad(:).');       % [1,nViews]
+    % Types & shapes
+    P          = single(P);                       % [nu,nv,nViews]
+    angles_rad = single(angles_rad(:).');         % [1,nViews]
     DSD        = single(DSD);
     DSO        = single(DSO);
     du         = single(du);  dv = single(dv);
@@ -25,10 +28,10 @@ function FDKvol = reconFDK_codegen( ...
     det_pix  = single([du dv]);
     vox_size = single([dx dy dz]);
 
-  FDKvol = simpleFDK_CBCT_vox_cg( ...
-    P, angles_rad, DSD, DSO, det_pix, vox_size, ...
-    int32(nx), int32(ny), int32(nz), filter_type, Nf_fft, ...
-    u0_use, v0_use, logical(verbose), padFactor, batchZ, logical(useGPU));
+    FDKvol = simpleFDK_CBCT_vox_cg( ...
+        P, angles_rad, DSD, DSO, det_pix, vox_size, ...
+        int32(nx), int32(ny), int32(nz), filter_type, Nf_fft, ...
+        u0_use, v0_use, logical(verbose), padFactor, batchZ, logical(useGPU));
 end
 
 
@@ -43,7 +46,7 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
 % SIMPLEFDK_CBCT_VOX_CG
 % Streamed, chunked FFT across views with padFactor-controlled effective FFT size.
 
-    angles = angles(:)';                          % row
+    angles = angles(:)';                          % [1,nViews] row
     [nu, nv, nViews] = size(projections);
 
     % Detector & voxel sizes (single)
@@ -126,38 +129,35 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
     pre       = floor((double(Nf_eff) - double(nu)) / 2);              % padding
 
     % 2) Build frequency response H for Nf_eff (single)
-    k  = (0:double(Nf_eff)-1).';               % double
-    df = 1 / (double(Nf_eff) * double(du));    % double
+    k  = (0:double(Nf_eff)-1).';                 % double
+    df = 1 / (double(Nf_eff) * double(du));      % double
     f  = zeros(double(Nf_eff),1,'like',single(0));
     half = floor(double(Nf_eff)/2);
     f(1:half+1) = single((0:half).' * df);
     if Nf_eff > 2
         f(half+2:end) = single((-(half-1):-1).' * df);
     end
-    ramp = abs(f);                              % single
+    ramp = abs(f);                                % single
 
     switch lower(filter_type)
         case 'ramp'
             H = ramp;
         case 'shepp-logan'
-            H = ramp .* sinc(f * du);           % single supported
+            H = ramp .* sinc(f * du);            % single supported
         case 'hamming'
             phi = single((k/(double(Nf_eff)-1)) - 0.5);
             H   = ramp .* (single(0.54) + single(0.46) * cos(single(2*pi) * phi));
         otherwise
             coder.internal.errorIf(true, 'simpleFDK:UnknownFilter', 'Unknown filter type');
     end
-    H = reshape(H, [Nf_eff 1 1]);              % [Nf_eff,1,1], single
+    H = reshape(H, [Nf_eff 1 1]);                % [Nf_eff,1,1], single
 
     % 3) Recon accumulator
     recon_yx_z = zeros(ny, nx, nz, 'like', projections);  % single
 
     % 4) Chunk across views to bound memory
-    maxChunkViews = int32(8);                   % tune to 8/16 as needed
+    maxChunkViews = int32(8);                     % tune to 8/16 as needed
     nViews_i32    = int32(nViews);
-
-    % Precompute detector index grids for Interpolant
-    uGrid = 1:nu; vGrid = 1:nv;
 
     % Loop over view chunks
     for ia0 = int32(1) : maxChunkViews : nViews_i32
@@ -185,8 +185,9 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
                 Pp_chunk(1:double(Nf_eff), :, :) = Pseg;
             end
         else
+            % In generated MEX with gpuConfig, fft/ifft map to cuFFT
             Pseg = Pp_chunk(1:double(Nf_eff), :, :);
-            Pf   = fft(Pseg, [], 1);       % cuFFT under gpuConfig
+            Pf   = fft(Pseg, [], 1);
             Pf   = Pf .* H;
             Pseg = real(ifft(Pf, [], 1));
             Pp_chunk(1:double(Nf_eff), :, :) = Pseg;
@@ -204,9 +205,6 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
             Xr =  ca * X2D - sa * Y2D;            % [ny,nx] single
             Yr =  sa * X2D + ca * Y2D;            % [ny,nx] single
 
-            % Linear interpolant for this view
-            F = griddedInterpolant({uGrid, vGrid}, Filt_chunk(:,:,double(j)+1), 'linear', 'none');
-
             denom = dso - Xr;
             valid = denom > denom_eps;
             denom = max(denom, denom_eps);
@@ -221,13 +219,17 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
 
                 Zk = reshape(z(double(k0):double(k1)), 1, 1, double(nb));  % [1,1,nb] single
 
-                u_idx = repmat(u_idx_base, 1, 1, double(nb));             % [ny,nx,nb]
-                v_idx = v0 + (t .* (Zk / dv));                            % [ny,nx,nb]
+                % Expand indices for all Z in batch via repmat (codegen-safe)
+                u_idx = repmat(u_idx_base, 1, 1, double(nb));              % [ny,nx,nb]
+                v_idx = v0 + (t .* (Zk / dv));                             % [ny,nx,nb]
 
-                samp = F(u_idx, v_idx);                                   % [ny,nx,nb]
+                % --------- Bilinear interpolation (codegen-safe) ----------
+                curView = Filt_chunk(:,:,double(j)+1);                     % [nu,nv] single
+                samp = bilinearSample2D(curView, u_idx, v_idx);            % [ny,nx,nb]
                 samp(~isfinite(samp)) = cast(0, 'like', samp);
+                % ---------------------------------------------------------
 
-                wbp = (dso ./ denom).^2;                                  % [ny,nx]
+                wbp = (dso ./ denom).^2;                                   % [ny,nx]
                 contrib = samp .* repmat(wbp, 1, 1, double(nb)) * dth(double(ia));
 
                 if any(~valid(:))
@@ -248,6 +250,7 @@ function recon_volume = simpleFDK_CBCT_vox_cg( ...
     recon_volume = permute(recon_yx_z, [2 1 3]); % [nx,ny,nz] single
 end
 
+
 % ----------------------------------------------------------------------
 % Helper: power-of-two ceiling for a positive scalar (codegen-safe)
 % ----------------------------------------------------------------------
@@ -260,4 +263,35 @@ function p2 = pow2ceil_from_scalar(x)
         p = p * 2.0;
     end
     p2 = p;  % double
+end
+
+
+% ----------------------------------------------------------------------
+% Helper: Bilinear sampler (host-side, MATLAB Coder safe)
+% ----------------------------------------------------------------------
+function val = bilinearSample2D(img, u, v)
+%#codegen
+% img: [nu,nv] single
+% u,v: same size, 1-based coordinates in pixel units (single)
+% returns val same size as u/v
+    nu = size(img,1); nv = size(img,2);
+
+    % Clamp to valid range so neighbors exist (u+1, v+1)
+    u = max(single(1), min(single(nu - 1), u));
+    v = max(single(1), min(single(nv - 1), v));
+
+    u0 = floor(u); v0 = floor(v);
+    du = u - u0;   dv = v - v0;
+
+    u0i = int32(u0); v0i = int32(v0);
+    u1i = u0i + 1;  v1i = v0i + 1;
+
+    % Linear indices (column-major)
+    sz = [nu nv];
+    f00 = img(sub2ind(sz, u0i, v0i));
+    f10 = img(sub2ind(sz, u1i, v0i));
+    f01 = img(sub2ind(sz, u0i, v1i));
+    f11 = img(sub2ind(sz, u1i, v1i));
+
+    val = (1-du).*(1-dv).*f00 + du.*(1-dv).*f10 + (1-du).*dv.*f01 + du.*dv.*f11;
 end
