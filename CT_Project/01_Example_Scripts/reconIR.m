@@ -26,7 +26,7 @@ function hybridIR_vol = reconIR(inputMat, fdkMat, varargin)
     % -------- Parse options --------
     p = inputParser;
     addParameter(p, 'UseGPU', 'auto', @(x)islogical(x) || (ischar(x) && strcmpi(x,'auto')));
-    addParameter(p, 'NumIter', 15, @(x)isscalar(x) && x>=1);
+    addParameter(p, 'NumIter', 1, @(x)isscalar(x) && x>=1);
     addParameter(p, 'Alpha', 0.03, @(x)isscalar(x) && x>0);
     addParameter(p, 'Lambda', 0.01, @(x)isscalar(x) && x>=0);
     addParameter(p, 'GaussSigma', 1, @(x)isscalar(x) && x>=0);
@@ -52,8 +52,19 @@ function hybridIR_vol = reconIR(inputMat, fdkMat, varargin)
     if nargin < 2 || isempty(fdkMat)
         error('Please provide both inputMat (CT_*.mat) and fdkMat (FDK_*.mat)');
     end
-    S      = load(inputMat);
-    FDKdat = load(fdkMat);
+    S = load(inputMat);
+
+
+    % -------- Resolve fdkMat: file OR object --------
+    if ischar(fdkMat) || isstring(fdkMat)
+        % Old behavior: fdkMat is a .mat file path
+        FDKdat = load(string(fdkMat));
+    else
+        % New behavior: fdkMat is already the FDK result (volume/object)
+        FDKdat = fdkMat;
+    end
+
+
 
     % Projections & angles
     P          = S.P;                           % could be [views nv nu] or [nu nv views]
@@ -81,14 +92,20 @@ function hybridIR_vol = reconIR(inputMat, fdkMat, varargin)
     [nu, nv, nViews] = size(P); %#ok<ASGLU>
 
     % -------- Initial estimate from FDK --------
-    if isfield(FDKdat,'FDKvol')
-        x = FDKdat.FDKvol;
-    elseif isfield(FDKdat,'recon_volume')
-        x = FDKdat.recon_volume;
-    else
-        error('FDK file should contain FDKvol or recon_volume.');
-    end
-    [nx, ny, nz] = size(x);
+  % -------- Initial estimate from FDK --------
+  if isstruct(FDKdat)
+      if isfield(FDKdat,'FDKvol')
+          x = FDKdat.FDKvol;
+      elseif isfield(FDKdat,'recon_volume')
+          x = FDKdat.recon_volume;
+      else
+          error('FDK MAT file must contain FDKvol or recon_volume.');
+      end
+  else
+      % FDKdat is already a volume/object from reconFDK
+      x = FDKdat;
+  end
+  [nx, ny, nz] = size(x);
 
     % -------- Voxel size (try to be consistent) --------
     % Prefer metadata if present; else infer FOV in x/y and slice thickness

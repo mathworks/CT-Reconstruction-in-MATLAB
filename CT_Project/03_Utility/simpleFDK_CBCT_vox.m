@@ -133,7 +133,9 @@ function recon_volume = simpleFDK_CBCT_vox(projections, angles, dsd, dso, det_pi
 
         % Crop back
         projections_filt(:,:,ia) = single(Pp(pre+1 : pre+nu, :));
+
     end
+    sliceViewer(projections_filt);
 
     % ---- Angle weights for integration ----
     if nViews > 1

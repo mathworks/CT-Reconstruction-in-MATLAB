@@ -47,6 +47,7 @@ addParameter(p, 'ModelFile', '', @(s)ischar(s)||isstring(s));
 addParameter(p, 'ReconFile', '', @(s)ischar(s)||isstring(s));
 addParameter(p, 'PrintShapes', true, @(x)islogical(x)||isnumeric(x));
 addParameter(p, 'ExecEnv', 'auto', @(s)any(strcmpi(s,{'auto','gpu','cpu'})));
+addParameter(p, 'Verbose', true, @(x)islogical(x)||isnumeric(x));  
 parse(p, varargin{:});
 opt = p.Results;
 
@@ -315,48 +316,150 @@ end  % ===== END MAIN FUNCTION =====
 % ========================================================================
 
 function V = resolveVolumeInput(in, varName, tag)
-    if isnumeric(in)
+    % Accept:
+    %  - 3D numeric array (or gpuArray)
+    %  - MAT file path (char/string)
+    %  - struct/object holding a 3D volume (e.g., output wrappers)
+
+    % ---- Case 1: direct volume (numeric or gpuArray) ----
+    if isnumeric(in) || isa(in,'gpuArray')
         V = in;
         assert(ndims(V)==3, '%s volume must be 3D.', tag);
         return;
     end
-    assert(ischar(in)||isstring(in), '%s must be a 3D array or a MAT filepath.', tag);
-    S = load(char(in));
-    if ~isempty(varName)
-        assert(isfield(S, char(varName)), 'Variable %s not found in %s', char(varName), char(in));
-        V = S.(char(varName));
-        % If it's a struct wrapping same-named inner field (e.g., S.FDKvol.FDKvol)
-        if isstruct(V) && isfield(V, char(varName))
-            V = V.(char(varName));
+
+    % ---- Case 2: struct input (wrapper) ----
+    if isstruct(in)
+        % If user specified varName, honor it
+        if ~isempty(varName)
+            vn = char(varName);
+            assert(isfield(in, vn), 'Variable %s not found in %s struct input.', vn, tag);
+            V = in.(vn);
+            if isstruct(V) && isfield(V, vn), V = V.(vn); end
+            assert((isnumeric(V) || isa(V,'gpuArray')) && ndims(V)==3, ...
+                'Selected field %s in %s struct must be a 3D numeric volume.', vn, tag);
+            return;
         end
-        assert(ndims(V)==3, 'Selected variable %s must be 3D.', char(varName));
+
+        % Otherwise: try common field names (same preference list you used for MAT files)
+        pref = {'FDKvol','hybridIR_vol','hybridIR','yPredVol','recon_volume'};
+        for i=1:numel(pref)
+            if isfield(in, pref{i})
+                tmp = in.(pref{i});
+                if isstruct(tmp) && isfield(tmp, pref{i}), tmp = tmp.(pref{i}); end
+                if (isnumeric(tmp) || isa(tmp,'gpuArray')) && ndims(tmp)==3
+                    V = tmp;
+                    return;
+                end
+            end
+        end
+
+        % Fallback: first 3D numeric field
+        fn = fieldnames(in);
+        for i=1:numel(fn)
+            tmp = in.(fn{i});
+            if (isnumeric(tmp) || isa(tmp,'gpuArray')) && ndims(tmp)==3
+                V = tmp; return;
+            end
+            if isstruct(tmp)
+                fn2 = fieldnames(tmp);
+                for j=1:numel(fn2)
+                    val = tmp.(fn2{j});
+                    if (isnumeric(val) || isa(val,'gpuArray')) && ndims(val)==3
+                        V = val; return;
+                    end
+                end
+            end
+        end
+
+        error('Could not find a 3D volume inside %s struct input. Provide FDKVar/TGTVar.', tag);
+    end
+
+    % ---- Case 3: MAT file path ----
+    assert(ischar(in) || isstring(in), '%s must be a 3D array/struct or a MAT filepath.', tag);
+
+    S = load(char(in));
+
+    if ~isempty(varName)
+        vn = char(varName);
+        assert(isfield(S, vn), 'Variable %s not found in %s', vn, char(in));
+        V = S.(vn);
+        if isstruct(V) && isfield(V, vn), V = V.(vn); end
+        assert((isnumeric(V) || isa(V,'gpuArray')) && ndims(V)==3, 'Selected variable %s must be 3D.', vn);
         return;
     end
+
     % Auto-detect reasonable candidates
     cand = fieldnames(S);
-    % Prefer common names
     pref = {'FDKvol','hybridIR_vol','hybridIR','yPredVol','recon_volume'};
     for i=1:numel(pref)
         if isfield(S, pref{i})
             tmp = S.(pref{i});
             if isstruct(tmp) && isfield(tmp, pref{i}), tmp = tmp.(pref{i}); end
-            if isnumeric(tmp) && ndims(tmp)==3, V = tmp; return; end
+            if (isnumeric(tmp) || isa(tmp,'gpuArray')) && ndims(tmp)==3, V = tmp; return; end
         end
     end
+
     % Fall back: first 3D numeric
     for i=1:numel(cand)
         tmp = S.(cand{i});
-        if isnumeric(tmp) && ndims(tmp)==3, V = tmp; return; end
+        if (isnumeric(tmp) || isa(tmp,'gpuArray')) && ndims(tmp)==3, V = tmp; return; end
         if isstruct(tmp)
             fn = fieldnames(tmp);
             for j=1:numel(fn)
                 val = tmp.(fn{j});
-                if isnumeric(val) && ndims(val)==3, V = val; return; end
+                if (isnumeric(val) || isa(val,'gpuArray')) && ndims(val)==3, V = val; return; end
             end
         end
     end
+
     error('Could not auto-detect a 3D volume from %s. Provide FDKVar/TGTVar.', char(in));
 end
+
+
+% function V = resolveVolumeInput(in, varName, tag)
+%     if isnumeric(in)
+%         V = in;
+%         assert(ndims(V)==3, '%s volume must be 3D.', tag);
+%         return;
+%     end
+%     assert(ischar(in)||isstring(in), '%s must be a 3D array or a MAT filepath.', tag);
+%     S = load(char(in));
+%     if ~isempty(varName)
+%         assert(isfield(S, char(varName)), 'Variable %s not found in %s', char(varName), char(in));
+%         V = S.(char(varName));
+%         % If it's a struct wrapping same-named inner field (e.g., S.FDKvol.FDKvol)
+%         if isstruct(V) && isfield(V, char(varName))
+%             V = V.(char(varName));
+%         end
+%         assert(ndims(V)==3, 'Selected variable %s must be 3D.', char(varName));
+%         return;
+%     end
+%     % Auto-detect reasonable candidates
+%     cand = fieldnames(S);
+%     % Prefer common names
+%     pref = {'FDKvol','hybridIR_vol','hybridIR','yPredVol','recon_volume'};
+%     for i=1:numel(pref)
+%         if isfield(S, pref{i})
+%             tmp = S.(pref{i});
+%             if isstruct(tmp) && isfield(tmp, pref{i}), tmp = tmp.(pref{i}); end
+%             if isnumeric(tmp) && ndims(tmp)==3, V = tmp; return; end
+%         end
+%     end
+%     % Fall back: first 3D numeric
+%     for i=1:numel(cand)
+%         tmp = S.(cand{i});
+%         if isnumeric(tmp) && ndims(tmp)==3, V = tmp; return; end
+%         if isstruct(tmp)
+%             fn = fieldnames(tmp);
+%             for j=1:numel(fn)
+%                 val = tmp.(fn{j});
+%                 if isnumeric(val) && ndims(val)==3, V = val; return; end
+%             end
+%         end
+%     end
+%     error('Could not auto-detect a 3D volume from %s. Provide FDKVar/TGTVar.', char(in));
+% end
 
 function out = ternary(cond, a, b), if cond, out=a; else, out=b; end, end
 
