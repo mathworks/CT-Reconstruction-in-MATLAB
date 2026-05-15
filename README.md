@@ -13,7 +13,7 @@ Welcome to the **CBCT Reconstruction in MATLAB®** repository. This project demo
 - Hybrid Iterative Refinement (HIR) for improved data consistency  
 - Deep Learning (2D U‑Net) for slice‑wise enhancement  
 
-The workflows are GPU‑aware for fast prototyping and are structured to integrate with CI/CD pipelines for automated validation. The code organization supports both research exploration and production‑oriented deployment.
+The workflows are GPU‑aware for fast prototyping and are structured to integrate with CI/CD pipelines for automated validation. The code organization supports both research exploration and production‑oriented deployment. Furthermore, the examples can be expanded to support certification for IEC 62304 standard. The code organization supports both research exploration and production‑oriented deployment.
 
 ---
 
