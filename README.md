@@ -1,68 +1,54 @@
-## CBCT Reconstruction in MATLAB
-
+CBCT Reconstruction in MATLAB
 Overview
-Welcome to the CBCT Reconstruction in MATLAB® repository! This project showcases three complementary cone‑beam CT (CBCT) reconstruction approaches using MATLAB:
+Welcome to the CBCT Reconstruction in MATLAB® repository. This project demonstrates three complementary cone‑beam CT (CBCT) reconstruction approaches implemented in MATLAB:
 
-- FDK (Filtered Backprojection) with automatic GPU utilization
-- Hybrid Iterative Refinement (IR) that enforces data‑consistency with light regularization
-- Deep Learning (2D U‑Net) slice‑wise enhancement from FDK to target quality
+FDK (Filtered Backprojection) with automatic GPU utilization
+Hybrid Iterative Refinement (IR) for improved data consistency
+Deep Learning (2D U‑Net) for slice‑wise enhancement
 
+The workflows are GPU‑aware for fast prototyping and are structured to integrate with CI/CD pipelines for automated validation. The code organization supports both research exploration and production‑oriented deployment.
 
-All examples are written to be GPU‑aware for rapid prototyping and can integrate with CI/CD pipelines for automated testing and verification*. Code is structured for easy extension and production‑grade deployment.
+Reconstruction Methods
+FDK‑Based Reconstruction
+This implementation provides a classical cone‑beam FDK pipeline with robust input handling. Projection stacks are automatically interpreted whether provided as [nu nv nViews] or [nViews nv nu]. The pipeline dynamically selects GPU or CPU execution and supports batching to fit available memory.
+Hybrid Iterative Refinement (IR)
+The IR approach starts from an FDK reconstruction and iteratively reduces the forward‑projection residual. A backprojected gradient is combined with a light regularization term, such as Gaussian smoothing or Tikhonov‑like priors. Parameters such as step size, iteration count, and batching can be tuned to balance convergence, stability, and runtime.
+Deep Learning‑Based Enhancement (2D U‑Net)
+A slice‑wise 2D U‑Net is used to enhance FDK reconstructions toward a target quality (e.g., IR or ground truth). The workflow includes data preparation, training/validation splitting, TIFF export, and inference with tiled prediction and blending. Quantitative metrics such as PSNR and SSIM are supported for evaluation.
 
-*Additional products/tooling may be required for regulated environments.
+Highlights
+Rapid Prototyping and Deployment
+The implementation automatically detects CUDA‑capable GPUs and adapts execution accordingly. Key parameters such as batching depth and padding factors allow the workflows to scale across different hardware configurations. Function interfaces are intentionally minimal, enabling easy integration into custom pipelines.
+Automated Testing and Verification
+The repository is designed to be CI/CD‑ready. A lightweight pipeline can be configured to run GPU smoke tests using small datasets, ensuring reproducibility and stability across updates. Deterministic seeds, structured outputs, and logging recommendations support consistent experimentation.
 
-# Features
-1. **FDK‑Based Reconstruction**
+Getting Started
 
-Description: Classical cone‑beam FDK reconstruction with robust input handling. Accepts projection stacks in [nu nv nViews] or [nViews nv nu] form and auto‑permutes. Supports auto GPU/CPU selection and batching to fit device memory.
+### Prerequisites  
+The examples require MATLAB R2026a or newer along with the following products:
 
-2. **Hybrid Iterative Refinement (IR)**
+- [MATLAB](https://www.mathworks.com/products/matlab.html)&trade 
+- [MATLAB Coder](https://www.mathworks.com/products/matlab-coder.html)&trade  
+- [GPU Coder](https://www.mathworks.com/products/gpu-coder.html)&trade  
+- [Deep Learning Toolbox](https://www.mathworks.com/products/deep-learning.html)&trade  
+- [Fuzzy Logic Toolbox](https://www.mathworks.com/products/fuzzy-logic.html)&trade  
+- [Image Processing Toolbox](https://www.mathworks.com/products/image-processing.html)&trade  
+- [Computer Vision Toolbox](https://www.mathworks.com/products/computer-vision.html)&trade  
+- [Medical Imaging Toolbox](https://www.mathworks.com/products/medical-imaging.html)&trade  
+- [Parallel Computing Toolbox](https://www.mathworks.com/products/parallel-computing.html)&trade  
+- [Signal Processing Toolbox](https://www.mathworks.com/products/signal.html)&trade  
+- [System Identification Toolbox](https://www.mathworks.com/products/system-identification.html)&trade  
 
-Description: Starts from an FDK volume and iteratively reduces the forward‑projection residual using a backprojected gradient and a light Gaussian/Tikhonov‑like prior. Tunable step size, iterations, forward projector sampling, and batching for stability and speed.
+### Optional (for IEC 62304 workflows)
 
-3. **Deep Learning‑Based Enhancement (2D U‑Net)**
+- [MATLAB Test](https://www.mathworks.com/products/matlab-test.html)&trade  
+- [Requirements Toolbox](https://www.mathworks.com/products/requirements.html)&trade  
+- [Embedded Coder](https://www.mathworks.com/products/embedded-coder.html)&trade  
+- [IEC Certification Kit](https://www.mathworks.com/products/iec-certification-kit.html)&trade  
 
-Description: Trains a 2D U‑Net per slice to map FDK → target (e.g., higher‑quality IR or ground truth). Handles train/val selection, TIFF export, patch or full‑slice training, tiled inference with Hann blending, and PSNR/SSIM reporting.
-## Highlights
-**Rapid Prototyping and Deployment**
+Reference
+Wu, M., FitzGerald, P., Zhang, J., Segars, W.P., Yu, H., Xu, Y., and De Man, B., 2022. XCIST—an open access x-ray/CT simulation toolkit. Physics in Medicine & Biology, 67(19), p.194002.
 
-GPU‑Enabled: Auto‑detects CUDA‑capable GPUs via gpuDeviceCount. Key parameters (BatchZ, PadFactor, BatchPixels) allow scaling to your hardware.
-Ease of Use: Minimal function signatures with sensible defaults; robust variable auto‑detection from .mat files.
-
-**Automated Testing and Verification**
-
-CI/CD Ready: Includes an optional GitLab CI snippet for GPU smoke tests*. Add small sample inputs to validate pipeline integrity on every commit.
-Reproducibility: Deterministic seeds for DL, structured output folders, and explicit option logging recommended.
-
-* Requires a GPU‑enabled runner and MATLAB availability on the runner (or Docker with MATLAB).
-
-# Getting Started
-**Prerequisites**
-You will need MATLAB release R2026a or newer and the following MathWorks Products to run these examples.
-
-
-• [Parallel Computing Toolbox](https://www.mathworks.com/products/parallel-computing.html)&trade;
-
-• [MATLAB Coder](https://www.mathworks.com/products/matlab-coder.html)&trade;
-
-• [GPU Coder](https://www.mathworks.com/products/gpu-coder.html)&trade;
-
-• [Medical Imaging Toolbox](https://www.mathworks.com/products/medical-imaging.html)&trade;
-
-• [Deep Learning Toolbox](https://www.mathworks.com/products/deep-learning.html)&trade;
-
-• [Image Processing Toolbox](https://www.mathworks.com/products/image-processing.html)&trade;
-
-
-• [Computer Vision Toolbox](https://www.mathworks.com/products/computer-vision.html)&trade;
-
-### Reference
-
-[1] Wu, M., FitzGerald, P., Zhang, J., Segars, W.P., Yu, H., Xu, Y. and De Man, B., 2022. XCIST—an open access x-ray/CT simulation toolkit. Physics in Medicine & Biology, 67(19), p.194002.
-
-### License
-The license is available in license.txt file in this GitHub repository.
-
-Copyright 2026 The MathWorks, Inc.
-
+License
+See license.txt in the repository for details.
+© 2026 The MathWorks, Inc.
