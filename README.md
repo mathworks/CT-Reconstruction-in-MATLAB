@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="animation.gif" alt="MRI Volume" width="400" height="300">
+</p>
+
+
 # CBCT Reconstruction in MATLAB
 
 ## Overview
