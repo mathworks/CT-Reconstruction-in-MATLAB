@@ -62,7 +62,74 @@ The examples require MATLAB R2026a or newer along with the following products:
 - [MATLAB Test](https://www.mathworks.com/products/matlab-test.html)&trade;  
 - [Requirements Toolbox](https://www.mathworks.com/products/requirements.html)&trade;  
 - [Embedded Coder](https://www.mathworks.com/products/embedded-coder.html)&trade;  
-- [IEC Certification Kit](https://www.mathworks.com/products/iec-certification-kit.html)&trade;  
+- [IEC Certification Kit](https://www.mathworks.com/products/iec-certification-kit.html)&trade;
+  
+---
+
+# Installation
+
+
+1. Clone the repository:
+```bash
+git clone https://github.com/mathworks/CT-Reconstruction-in-MATLAB-.git
+```
+
+2. Navigate to the project directory:
+cd CT-Reconstruction-in-MATLAB
+
+3. Open MATLAB and add the project directory to the path:
+addpath(genpath('CT_Project'))
+
+# Usage
+
+Navigate to the CT_Project folder.
+This folder contains all reconstruction workflows, utilities, and supporting scripts.
+
+
+# Run CBCT Reconstruction Examples
+
+Open the folder 01_Example_Scripts.
+
+This folder contains core reconstruction implementations:
+
+- reconFDK.m — FDK-based CBCT reconstruction
+- reconIR.m — Hybrid Iterative Refinement
+- reconDL.m — Deep learning-based enhancement
+
+
+# Run the startup.m file 
+This step initializes the environment, sets up paths, and prepares dependencies.
+
+
+# GPU Execution and Code Generation
+
+Open the folder 02_Cuda_Codegen_Scripts.
+
+This folder provides GPU Coder-ready scripts:
+
+- reconFDK_codegen.m
+- reconIR_codegen.m
+- reconDL_codegen.m
+
+These scripts enable CUDA code generation and optimized GPU execution.
+
+# End-to-End Demo
+
+Run either:
+
+- demoScript.m
+- demoScript.mlx
+
+These scripts provide:
+
+- End-to-end FDK, IR, and DL reconstruction workflows
+- CPU and GPU execution options
+- Performance benchmarking and visualization
+
+
+# Output
+- Reconstructed volumes, intermediate outputs, and evaluation metrics are generated during execution.
+- Outputs are organized in structured directories for easy comparison and validation.
 
 ---
 
